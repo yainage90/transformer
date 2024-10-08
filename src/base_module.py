@@ -184,3 +184,20 @@ class PositionalEncoding(nn.Module):
         out = x + pos_embed
         out = self.dropout(out)
         return out
+
+
+class PositionEmbedding(nn.Module):
+    def __init__(self, d_embed, max_len=256, dropout=0.1):
+        super(PositionEmbedding, self).__init__()
+        self.embedding = nn.Embedding(max_len, d_embed)
+        self.dropout = nn.Dropout(p=dropout)
+        self.layer_norm = nn.LayerNorm(d_embed, eps=1e-6)
+
+    def forward(self, x):
+        # x: (batch_size, seq_len)
+        seq_len = x.size(1)
+        position_ids = torch.arange(seq_len, dtype=torch.long, device=x.device)
+        position_ids = position_ids.unsqueeze(0).expand_as(x)
+        out = self.embedding(position_ids)
+        out = self.layer_norm(self.dropout(out))
+        return out
