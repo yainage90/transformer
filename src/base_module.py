@@ -9,10 +9,9 @@ import torch.nn.functional as F
 class Encoder(nn.Module):
     def __init__(self, encoder_block, n_layer):
         super(Encoder, self).__init__()
-        self.layers = []
-        for _ in range(n_layer):
-            self.layers.append(copy.deepcopy(encoder_block))
-
+        self.layers = nn.ModuleList([
+            copy.deepcopy(encoder_block) for _ in range(n_layer)
+        ])
             
     def forward(self, src, src_mask):
         out = src
@@ -22,11 +21,13 @@ class Encoder(nn.Module):
 
         
 class EncoderBlock(nn.Module):
-    def __init__(self, self_attention, position_ff, d_model, device=torch.device('cpu')):
+    def __init__(self, self_attention, position_ff, d_model):
         super(EncoderBlock, self).__init__()
         self.self_attention = self_attention
         self.position_ff = position_ff
-        self.residuals = [ResidualConnectionLayer(d_model=d_model, device=device) for _ in range(2)]
+        self.residuals = nn.ModuleList([
+            ResidualConnectionLayer(d_model=d_model) for _ in range(2)
+        ])
 
     def forward(self, src, src_mask):
         out = src
@@ -48,12 +49,14 @@ class Decoder(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, self_attention, cross_attention, position_ff, d_model, device=torch.device('cpu')):
+    def __init__(self, self_attention, cross_attention, position_ff, d_model):
         super(DecoderBlock, self).__init__()
         self.self_attention = self_attention
         self.cross_attention = cross_attention
         self.position_ff = position_ff
-        self.residuals = [ResidualConnectionLayer(d_model=d_model, device=device) for _ in range(3)]
+        self.residuals = nn.ModuleList([
+            ResidualConnectionLayer(d_model=d_model) for _ in range(3)
+        ])
 
     def forward(self, tgt, encoder_out, tgt_mask, src_tgt_mask):
         out = tgt
@@ -130,9 +133,9 @@ class PositionWiseFeedForwardLayer(nn.Module):
 
         
 class ResidualConnectionLayer(nn.Module):
-    def __init__(self, d_model, dropout=0.1, device=torch.device('cpu')):
+    def __init__(self, d_model, dropout=0.1):
         super(ResidualConnectionLayer, self).__init__()
-        self.norm = nn.LayerNorm(d_model).to(device)
+        self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, sub_layer):
@@ -167,7 +170,7 @@ class TokenEmbedding(nn.Module):
 
         
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_embed, max_len=256, dropout=0.1, device=torch.device("cpu")):
+    def __init__(self, d_embed, max_len=256, dropout=0.1):
         super(PositionalEncoding, self).__init__()
         encoding = torch.zeros(max_len, d_embed)
         encoding.requires_grad = False
@@ -175,12 +178,12 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_embed, 2) * -(math.log(10000.0) / d_embed))
         encoding[:, 0::2] = torch.sin(position * div_term)
         encoding[:, 1::2] = torch.cos(position * div_term)
-        self.encoding = encoding.unsqueeze(0).to(device)
+        self.encoding = encoding.unsqueeze(0)
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x):
         _, seq_len, _ = x.size()
-        pos_embed = self.encoding[: , :seq_len, :]
+        pos_embed = self.encoding[: , :seq_len, :].to(x.device)
         out = x + pos_embed
         out = self.dropout(out)
         return out
@@ -196,7 +199,7 @@ class PositionEmbedding(nn.Module):
     def forward(self, x):
         # x: (batch_size, seq_len)
         seq_len = x.size(1)
-        position_ids = torch.arange(seq_len, dtype=torch.long, device=x.device)
+        position_ids = torch.arange(seq_len, dtype=torch.int64, device=x.device)
         position_ids = position_ids.unsqueeze(0).expand_as(x)
         out = self.embedding(position_ids)
         out = self.layer_norm(self.dropout(out))
